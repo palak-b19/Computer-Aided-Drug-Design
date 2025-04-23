@@ -1,0 +1,2197 @@
+I want to improve the results of this, here is the code
+(Files content cropped to 300k characters, download full ingest to see more)
+================================================
+FILE: README.md
+================================================
+# Machine learning for compound potency prediction
+
+--------------------- MACHINE and DEEP LEARNING SCRIPTS: GENERAL INFORMATION ---------------------
+
+This folder contains scripts to build and analyse ML models. 
+
+Should be downloaded and all Jupyter notebooks can be used inside the folder.
+
+The content of the folders is summarized in the following.
+
+Jupyter Notebooks (.ipynb):
+
+(1) ml_models: Jupyter notebook with machine and deep learning models (MR, kNN, SVR, RFR, DNN), 
+able to predict compound potency for different datasets (Complete/Random/Diverse sets)
+
+(2) gcn_models: Jupyter notebook with graph neural networks models (GCN), to predict 
+compound potency for different datasets (Complete/Random/Diverse sets)
+
+(3) ml_models_cluster_potent_sets: Jupyter notebook with machine and deep learning models 
+(MR, kNN, SVR, RFR, DNN), able to predict compound potency for different datasets (Cluster/Potent sets)
+
+(4) gcn_models_cluster_potent_sets: Jupyter notebook with graph neural networks models (GCN), 
+able to predict compound potency for different datasets (Cluster/Potent sets)
+
+(5) data_analysis_figures: Jupyter notebook with a workflow for the data analysis of compound potency 
+predictions from regression models.
+
+
+Python scripts (.py):
+
+(6) ml_utils: script that provide supporting functions for ML/DL models generation
+
+(7) fingerprint: script to calculate molecular fingerprints (Morgan fingerprints)
+
+(8) machine_learning_models: script to build ML/DL models for regression (MR, kNN, SVR, RFR, DNN)
+
+
+(9) Folders:
+	
+	- dataset: stores the compound potency dataset used in this analysis
+		- dataset_analysis: Jupyter notebook for the dataset analysis
+
+	- ccr_results : stores the CCR algorithm results
+
+	- regression_results: stores regression models predictions
+
+
+(10) Python environment:
+
+	- ML_env.yml provides the python environment used for this analysis. (Requires instalation see below)
+
+
+Order of Jupyter notebook execution:
+
+1. (1), (2), (3), (4) to generate the model predictions (results). 
+
+2. (5) to generate the figures. 
+
+
+
+Python environment installation:
+
+1. Open Anaconda command line
+
+2. Type 'conda env create -n ENVNAME --file ENV.yml', where 'ENVNAME' is the desired environment and 'ENV' the full path to the yml file.
+
+
+Python environment export:
+
+1. Open Anaconda command line
+
+2. Type 'conda env export ENVNAME>ENV.yml', where 'ENVNAME' is the desired environment and 'ENV' the full path to the yml file.
+
+
+Requirements:
+
+- python=3.9
+- scipy=1.8.1
+- numpy=1.22.4
+- scikit-learn==1.1.1
+- tensorflow==2.9.1
+- keras==2.9.0
+- rdkit==2022.3.3
+- cudatoolkit=11.2.2
+- dgl-cuda11.1=0.8.1
+- deepchem==2.6.1
+- tqdm=4.64.0
+
+
+
+================================================
+FILE: data_analysis_figures.ipynb
+================================================
+# Jupyter notebook converted to Python script.
+
+#Utils
+import os
+import pandas as pd
+import numpy as np
+from scipy.stats import wilcoxon
+from itertools import combinations
+#Plotting
+from matplotlib import pyplot as plt
+import seaborn as sns
+import matplotlib
+%load_ext autoreload
+%autoreload 2
+# Output:
+#   The autoreload extension is already loaded. To reload it, use:
+
+#     %reload_ext autoreload
+
+
+"""
+# Load data
+"""
+
+results_path_reg = './regression_results/regular/'
+test_performance_ml = pd.read_csv(os.path.join(results_path_reg, 'performance_test.csv'))
+test_performance_gcn = pd.read_csv(os.path.join(results_path_reg, 'performance_test_gcn.csv'))
+test_performance = pd.concat([test_performance_ml, test_performance_gcn])
+test_performance = test_performance.set_index('Target ID')
+test_performance
+
+"""
+# Load y-randomization data
+"""
+
+results_path_y_rand = './regression_results/y_rand/'
+test_performance_ml_rand = pd.read_csv(os.path.join(results_path_y_rand, 'performance_test_y_rand.csv'))
+test_performance_gcn_rand = pd.read_csv(os.path.join(results_path_y_rand, 'performance_test_gcn_y_rand.csv'))
+test_performance_yrand = pd.concat([test_performance_ml_rand, test_performance_gcn_rand])
+test_performance_yrand = test_performance_yrand.set_index('Target ID')
+test_performance_yrand
+
+"""
+# Load Cluster and Potent data
+"""
+
+results_path_cp = './regression_results/cluster_potent/'
+test_performance_cluster_potent = pd.read_csv(os.path.join(results_path_cp, 'performance_test_cluster_potent.csv'))
+test_performance_gcn_cluster_potent = pd.read_csv(os.path.join(results_path_cp, 'performance_test_gcn_cluster_potent.csv'))
+test_performance_cluster_potent = pd.concat([test_performance_cluster_potent, test_performance_gcn_cluster_potent ])
+test_performance_cluster_potent = test_performance_cluster_potent.set_index('Target ID')
+test_performance_cluster_potent
+
+"""
+# Metrics summary
+"""
+
+performance_test_df_mean = test_performance.copy()
+
+performance_test_df_mean = performance_test_df_mean.groupby(["Target ID","Algorithm", "Approach", "Metric"]).agg({"Value": ["mean", "std"],
+                                                                                          }).round(decimals=3)
+performance_test_df_mean = pd.DataFrame(performance_test_df_mean)
+display(performance_test_df_mean)
+
+"""
+# Boxplot results (Complete, Random, Diverse sets)
+"""
+
+def plot_results(df, metric, savepath=None):
+    #plot parameters
+    matplotlib.rcdefaults()
+    font = {'size': 20}
+    matplotlib.rc('font', **font)
+    plt.figure(dpi=300)
+
+    # Database
+    df = df.loc[df ['Metric'] == metric].reset_index()
+
+    ax = sns.catplot(x="Approach", y="Value",
+                     hue="Algorithm", hue_order=['kNN', 'SVR', 'RFR', 'DNN', 'GCN', 'MR'],
+                     data=df,
+                     kind="box",
+                     col='Target ID',
+                     order=['Complete set', 'Random set', 'Diverse set'],
+                     col_wrap=2,
+                     aspect=1.5,
+                     palette=["tab:blue", "tab:orange", "tab:purple", "tab:green", "tab:red", "tab:gray"],
+                     width=0.8)
+
+    ax.set_titles("{col_var}: {col_name}")
+    ax.set_ylabels(f"{metric}", fontsize=20)
+    ax.set_xlabels(" ")
+    ax = sns.move_legend(ax, "lower center", bbox_to_anchor=(.485, 0.05), ncol=6, title=None, frameon=False)
+    plt.subplots_adjust(bottom=0.1)
+    if savepath:
+        plt.savefig(savepath + f'all_classes_{metric}.png', dpi=300)
+
+plot_results(test_performance, 'MAE', results_path_reg)
+plot_results(test_performance, 'RMSE', results_path_reg)
+
+"""
+# Boxplot results (Complete, Random, Diverse sets) - Y_randomization
+"""
+
+def plot_results_y_rand(df, metric, savepath=None):
+    #plot parameters
+    matplotlib.rcdefaults()
+    font = {'size': 20}
+    matplotlib.rc('font', **font)
+    plt.figure(dpi=300)
+
+    #Define database
+    df = df.loc[df['Metric'] == metric].reset_index()
+
+    ax = sns.catplot(x="Approach", y="Value",
+                     hue="Algorithm", hue_order=['kNN', 'SVR', 'MR'],
+                     data=df,
+                     kind="box",
+                     col='Target ID',
+                     order=['Complete set', 'Random set', 'Diverse set'],
+                     col_wrap=2,
+                     aspect=2,
+                     palette=["tab:blue", "tab:orange", "tab:gray"],
+                     width=0.8)
+
+    ax.set_titles("{col_var}: {col_name}")
+    ax.set_ylabels(f"{metric}", fontsize=20)
+    ax.set_xlabels(" ")
+
+    ax = sns.move_legend(ax, "lower center", bbox_to_anchor=(.485, 0.05), ncol=5, title=None, frameon=False)
+    plt.subplots_adjust(bottom=0.1)
+    if savepath:
+        plt.savefig(savepath + f'y_rand_{metric}.png', dpi=300)
+
+plot_results_y_rand(test_performance_yrand, 'MAE', results_path_y_rand)
+plot_results_y_rand(test_performance_yrand, 'RMSE', results_path_y_rand)
+
+"""
+# Barplot results (Cluster, Potent sets)
+"""
+
+def plot_results_cluster_potent(df, set, metric, savepath=None):
+    #plot parameters
+    matplotlib.rcdefaults()
+    font = {'size': 20}
+    matplotlib.rc('font', **font)
+    plt.figure(dpi=300)
+
+    # Database
+    df = df.loc[df ['Metric'] == metric].reset_index()
+
+    ax = sns.catplot(x="Approach", y="Value",
+                     hue="Algorithm", hue_order=['kNN', 'SVR', 'RFR', 'DNN', 'GCN', 'MR'],
+                     data=df,
+                     kind="bar",
+                     col='Target ID',
+                     order=[f'{set} set',],
+                     col_wrap=2,
+                     aspect=1.5,
+                     palette=["tab:blue", "tab:orange", "tab:purple", "tab:green", "tab:red", "tab:gray"],
+                    )
+
+    ax.set_titles("{col_var}: {col_name}")
+    ax.set_ylabels(f"{metric}", fontsize=20)
+    ax.set_xlabels(" ")
+    ax = sns.move_legend(ax, "lower center", bbox_to_anchor=(.485, 0.05), ncol=6, title=None, frameon=False)
+    plt.subplots_adjust(bottom=0.1)
+
+    if savepath:
+        plt.savefig(savepath + f'all_classes_{metric}_{set}.png', dpi=300)
+
+plot_results_cluster_potent(test_performance_cluster_potent, 'Cluster', 'MAE', results_path_cp)
+plot_results_cluster_potent(test_performance_cluster_potent, 'Potent', 'MAE', results_path_cp)
+plot_results_cluster_potent(test_performance_cluster_potent, 'Cluster', 'RMSE', results_path_cp)
+plot_results_cluster_potent(test_performance_cluster_potent, 'Potent', 'RMSE', results_path_cp)
+
+
+
+================================================
+FILE: fingerprints.py
+================================================
+import abc
+from typing import *
+from collections import defaultdict
+
+import rdkit.Chem as Chem
+import rdkit.Chem.AllChem as AllChem
+import scipy.sparse as sparse
+from rdkit import DataStructs
+
+
+def construct_check_mol_list(smiles_list: List[str]) -> List[Chem.Mol]:
+    mol_obj_list = [Chem.MolFromSmiles(smiles) for smiles in smiles_list]
+    if None in mol_obj_list:
+        invalid_smiles = []
+        for smiles, mol_obj in zip(smiles_list, mol_obj_list):
+            if not mol_obj:
+                invalid_smiles.append(smiles)
+        invalid_smiles = "\n".join(invalid_smiles)
+        raise ValueError(f"Following smiles are not valid:\n {invalid_smiles}")
+    return mol_obj_list
+
+
+def construct_check_mol(smiles: str) -> Chem.Mol:
+    mol_obj = Chem.MolFromSmiles(smiles)
+    if not mol_obj:
+        raise ValueError(f"Following smiles are not valid: {smiles}")
+    return mol_obj
+
+
+class AtomEnvironment(NamedTuple):
+    """"A Class to store environment-information for morgan-fingerprint features"""
+    central_atom: int  # Atom index of central atom
+    radius: int  # bond-radius of environment
+    environment_atoms: Set[int]  # set of all atoms within radius
+
+
+class Fingerprint(metaclass=abc.ABCMeta):
+    """A metaclass representing all fingerprint subclasses."""
+
+    def __init__(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def n_bits(self) -> int:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def fit(self, mol_obj_list: List[Chem.Mol]) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def fit_transform(self, mol_obj_list: List[Chem.Mol]) -> sparse.csr_matrix:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def transform(self, mol_obj_list: List[Chem.Mol]) -> sparse.csr_matrix:
+        raise NotImplementedError
+
+    def fit_smiles(self, smiles_list: List[str]):
+        mol_obj_list = construct_check_mol_list(smiles_list)
+        self.fit(mol_obj_list)
+
+    def fit_transform_smiles(self, smiles_list: List[str]):
+        mol_obj_list = construct_check_mol_list(smiles_list)
+        return self.fit_transform(mol_obj_list)
+
+    def transform_smiles(self, smiles_list: List[str]):
+        mol_obj_list = construct_check_mol_list(smiles_list)
+        return self.transform(mol_obj_list)
+
+
+class _MorganFingerprint(Fingerprint):
+    def __init__(self, radius: int = 2, use_features=False):
+        super().__init__()
+        self._n_bits = None
+        self._use_features = use_features
+        if isinstance(radius, int) and radius >= 0:
+            self._radius = radius
+        else:
+            raise ValueError(f"Number of bits has to be a positive integer! (Received: {radius})")
+
+    def __len__(self):
+        return self.n_bits
+
+    @property
+    def n_bits(self) -> int:
+        if self._n_bits is None:
+            raise ValueError("Number of bits is undetermined!")
+        return self._n_bits
+
+    @property
+    def radius(self):
+        return self._radius
+
+    @property
+    def use_features(self) -> bool:
+        return self._use_features
+
+    @abc.abstractmethod
+    def explain_rdmol(self, mol_obj: Chem.Mol) -> dict:
+        raise NotImplementedError
+
+    def bit2atom_mapping(self, mol_obj: Chem.Mol) -> Dict[int, List[AtomEnvironment]]:  # use
+        bit2atom_dict = self.explain_rdmol(mol_obj)
+        result_dict = defaultdict(list)
+
+        # Iterating over all present bits and respective matches
+        for bit, matches in bit2atom_dict.items():  # type: int, tuple
+            for central_atom, radius in matches:  # type: int, int
+                if radius == 0:
+                    result_dict[bit].append(AtomEnvironment(central_atom, radius, {central_atom}))
+                    continue
+                env = Chem.FindAtomEnvironmentOfRadiusN(mol_obj, radius, central_atom)
+                amap = {}
+                _ = Chem.PathToSubmol(mol_obj, env, atomMap=amap)
+                env_atoms = amap.keys()
+                assert central_atom in env_atoms
+                result_dict[bit].append(AtomEnvironment(central_atom, radius, set(env_atoms)))
+
+        # Transforming defaultdict to dict
+        return {k: v for k, v in result_dict.items()}
+
+
+class FoldedMorganFingerprint(_MorganFingerprint):
+    def __init__(self, n_bits=2048, radius: int = 2, use_features=False):
+        super().__init__(radius=radius, use_features=use_features)
+        if isinstance(n_bits, int) and n_bits >= 0:
+            self._n_bits = n_bits
+        else:
+            raise ValueError(f"Number of bits has to be a positive integer! (Received: {n_bits})")
+
+    def fit(self, mol_obj_list: List[Chem.Mol]) -> None:
+        pass
+
+    def transform(self, mol_obj_list: List[Chem.Mol]) -> sparse.csr_matrix:
+        fingerprints = []
+        for mol in mol_obj_list:
+            fp = AllChem.GetMorganFingerprintAsBitVect(mol, self.radius, useFeatures=self._use_features,
+                                                       nBits=self._n_bits)
+            fingerprints.append(sparse.csr_matrix(fp))
+        return sparse.vstack(fingerprints)
+
+    def transform_to_bv(self, mol_obj_list: List[Chem.Mol]):
+        fingerprints = []
+        for mol in mol_obj_list:
+            fp = AllChem.GetMorganFingerprintAsBitVect(mol, self.radius, useFeatures=self._use_features,
+                                                       nBits=self._n_bits)
+            fingerprints.append(fp)
+        return fingerprints
+
+    def fit_transform(self, mol_obj_list: List[Chem.Mol]) -> sparse.csr_matrix:
+        return self.transform(mol_obj_list)
+
+    def explain_rdmol(self, mol_obj: Chem.Mol) -> dict:
+        bi = {}
+        _ = AllChem.GetMorganFingerprintAsBitVect(mol_obj, self.radius, useFeatures=self._use_features, bitInfo=bi,
+                                                  nBits=self._n_bits)
+        return bi
+
+
+def ECFP4(smiles_list: List[str]) -> List[DataStructs.cDataStructs.ExplicitBitVect]:
+    """
+    Converts array of SMILES to ECFP bitvectors.
+        AllChem.GetMorganFingerprintAsBitVect(mol, radius, length)
+        mol: RDKit molecules
+        radius: ECFP fingerprint radius
+        length: number of bits
+
+    Returns: a list of fingerprints
+    """
+    mols = construct_check_mol_list(smiles_list)
+    return [AllChem.GetMorganFingerprintAsBitVect(m, 2, 2048) for m in mols]
+
+
+
+================================================
+FILE: gcn_models.ipynb
+================================================
+# Jupyter notebook converted to Python script.
+
+#Utils
+from tqdm.notebook import tqdm
+from ml_utils import *
+from machine_learning_models import *
+from fingerprints import *
+from sklearn.model_selection import ShuffleSplit
+import random
+#deepchem
+import deepchem as dc
+from deepchem.models import GraphConvModel
+#from IPython.core.display_functions import display
+import warnings
+warnings.filterwarnings('ignore')
+tf.get_logger().setLevel('ERROR')
+%load_ext autoreload
+%autoreload 2
+# Output:
+#   The autoreload extension is already loaded. To reload it, use:
+
+#     %reload_ext autoreload
+
+
+"""
+# Models Parameters
+### Select the desired parameters to be used by GCN models
+<p>
+<li> <b>model_list</b>: ML/DL models for regression (GCN: Graph Neural Networks)</li>
+</p>
+<p>
+<li> <b>cv_fold</b>: Number do data splits (trials) to be performed</li>
+</p>
+<p>
+<li> <b>data_order</b>: Different data orders ('regular': Normal potency (y) order, 'y_rand': Randomized potency values) </li>
+</p>
+<p>
+<li> <b>compound_sets</b>: Compound sets to be generated ('Complete set': 100% compounds, 'Random set': Random set of compounds, 'Diverse set': Chemical diverse set of compounds) </li>
+</p>
+<p>
+<li> <b>compound_sets_size</b>: Compound sets size to be generated for 'Random' and 'Diverse' based on the size of the respective 'Complete' ('Complete set': 100% compounds, 'Random set': 25%, 'Diverse set': 25%) </li>
+</p>
+<p>
+<li> <b>params_dict</b>: GCN hyperparameter grid (nb_epoch: number of epochs, learning_rate, graph_conv_layer, dense_layer_size, dropout, number of atom features) </li>
+</p>
+
+"""
+
+model_list = ['GCN']
+cv_folds=10
+data_order = ['regular', 'y_rand']
+compound_sets = ['Complete set', 'Random set', 'Diverse set']
+compound_sets_size = 0.25
+
+params_dict = {
+     "nb_epoch":[100, 200],
+     "learning_rate":[0.01, 0.001],
+     "n_tasks":[1],
+     "graph_conv_layers":[[64, 64], [256, 256], [512, 512], [1024, 1024]],
+     "dense_layer_size":[64, 256, 512, 1024],
+     "dropout":[0.0],
+     "mode":["regression"],
+     "number_atom_features":[75]}
+
+"""
+# Load Data
+### Load compound database to be used for the regression models
+
+<li> <b>db_path</b>: dataset full path</li>
+</p>
+"""
+
+# Load actives dB
+db_path = './dataset/'
+# Load actives dB
+regression_db = pd.read_csv(os.path.join(db_path, f'chembl_30_IC50_10_tids_1000_CPDs.csv'))
+# Target Classes
+regression_tids = regression_db.chembl_tid.unique()[:]
+
+"""
+# GCN Models
+### Folowing code generates potency prediction based on GCN models
+"""
+
+#Create saving path
+create_directory('./regression_results/')
+
+for data_ord in data_order:
+
+    performance_train_df = pd.DataFrame()
+    performance_test_df = pd.DataFrame()
+    predictions_test_df = pd.DataFrame()
+    predictions_train_df = pd.DataFrame()
+    parameter_resume = []
+
+    for target in tqdm(regression_tids):
+
+        # Select Target Database
+        regression_db_tid = regression_db.loc[regression_db.chembl_tid == target]
+
+        #compound potency
+        potency = regression_db_tid.pPot.values.tolist()
+
+        # Randomized Class potency
+        if data_ord == 'y_rand':
+            random.shuffle(potency)
+
+        for approach in compound_sets:
+            for i in range(3):
+                print(f'Training on {target} - {approach} - {data_ord}')
+
+                # Generate Mol object from SMILES
+                mols = [Chem.MolFromSmiles(smi) for smi in regression_db_tid.nonstereo_aromatic_smiles.tolist()]
+
+                # Data featurization
+                featurizer = dc.feat.ConvMolFeaturizer()
+                mol_graphs = featurizer.featurize(mols)
+
+                # Constructing Dataset
+                dataset = dc.data.NumpyDataset(X=mol_graphs, y=np.array(potency), ids=np.array(regression_db_tid.chembl_tid.values))
+
+                # Data Sampling Approaches
+                if approach == 'Random set':
+                    random.seed(i+1)
+                    mol_idx = random.sample([idx for idx in range(len(dataset))], int(compound_sets_size*len(dataset)))
+                    dataset = dataset.select(mol_idx)
+
+                elif approach == 'Diverse set':
+                    fp_bit_vec = ECFP4(regression_db_tid.nonstereo_aromatic_smiles.tolist())
+                    mol_idx = maxminpicker(fp_bit_vec, compound_sets_size, seed=i+1)
+                    dataset = dataset.select(mol_idx)
+
+                # Split dataset into TR and TE
+                data_splitter = ShuffleSplit(n_splits=cv_folds, random_state=20021997, test_size=0.2)
+                for trial, (train_idx, test_idx) in enumerate(data_splitter.split(dataset.X)):
+
+                    #Defining Training and Test sets
+                    training_set_u = dataset.select(train_idx)
+                    test_set_u = dataset.select(test_idx)
+
+                    # Initialize transformers
+                    transformers = [dc.trans.NormalizationTransformer(transform_y=True, dataset=training_set_u, move_mean=True)]
+
+                    #Transform data
+                    for transformer in transformers:
+                        training_set = transformer.transform(training_set_u)
+                    for transformer in transformers:
+                        test_set = transformer.transform(test_set_u)
+
+                    # Split dataset into TR and internal Validation
+                    splitter = dc.splits.RandomSplitter()
+                    train_set, valid_set = splitter.train_test_split(training_set, seed=trial)
+
+                    for model in model_list:
+
+                        #Define random seed
+                        set_seeds(trial)
+
+                        #Initialize GridSearch optimizer
+                        optimizer = dc.hyper.GridHyperparamOpt(dc.models.GraphConvModel)
+
+                        # Select optimization metric (MAE)
+                        metric = dc.metrics.Metric(dc.metrics.mae_score)
+
+                        # Best GCN model, parameters and final results
+                        best_model, best_params, all_results = optimizer.hyperparam_search(params_dict=params_dict,
+                                                                                           train_dataset=train_set,
+                                                                                           valid_dataset=valid_set,
+                                                                                           metric=metric,
+                                                                                           use_max=False,
+                                                                                           output_transformers=transformers,
+                                                                                           #logdir=r'C:\\GCN\\'
+                                                                                           )
+
+                        # Define final GCN model
+                        def final_gcn(data, best_params):
+
+                            gcn = GraphConvModel(n_tasks=best_params["n_tasks"],
+                                               graph_conv_layers=best_params["graph_conv_layers"],
+                                               dropout=best_params["dropout"],
+                                                mode=best_params["mode"],
+                                               predictor_hidden_feats=best_params["dense_layer_size"],
+                                               learning_rate=best_params["learning_rate"],
+                                                )
+
+                            gcn.fit(data, nb_epoch=best_params["nb_epoch"])
+
+                            return gcn
+
+                        #Best GCN model parameters
+                        opt_parameters_dict = {'model': model,
+                                               'trial': trial,
+                                               'Target ID': target,
+                                               'Approach':approach}
+
+                        if isinstance(best_params, tuple):
+                            best_params = {
+                                "nb_epoch":best_params[0],
+                                "learning_rate":best_params[1],
+                                "n_tasks":best_params[2],
+                                "graph_conv_layers":best_params[3],
+                                "dense_layer_size":best_params[4],
+                                "dropout":best_params[5],
+                                "mode":best_params[6],
+                                "number_atom_features":best_params[7]}
+
+                        for param, value in best_params.items():
+                            opt_parameters_dict[param] = value
+                        parameter_resume.append(opt_parameters_dict)
+
+                        # Generate final Model
+                        ml_model = final_gcn(training_set, best_params)
+
+                        # evaluate the model
+                        train_score = ml_model.evaluate(training_set, [metric], transformers)
+                        test_score = ml_model.evaluate(test_set, [metric], transformers)
+
+                        #TRAIN
+                        #Model Evaluation
+                        model_eval_train = Model_Evaluation(ml_model, training_set, training_set_u.y, transformers[0], model_id=model)
+
+                        #Performance df
+                        performance_train = model_eval_train.pred_performance
+                        performance_train["trial"] = trial
+                        performance_train["Approach"] = approach
+                        performance_train["Approach_trial"] = i
+                        performance_train["data_order"] = data_ord
+                        performance_train_df = pd.concat([performance_train_df, performance_train])
+
+                        # Prediction df
+                        predictions_train = model_eval_train.predictions
+                        predictions_train["trial"] = trial
+                        predictions_train["Approach"] = approach
+                        predictions_train["Approach_trial"] = i
+                        predictions_train["data_order"] = data_ord
+                        predictions_train_df = pd.concat([predictions_train_df, predictions_train])
+
+                        #Model Evaluation
+                        model_eval_test = Model_Evaluation(ml_model, test_set, test_set_u.y, transformers[0], model_id=model)
+
+                        #Performance df
+                        performance_test = model_eval_test.pred_performance
+                        performance_test["trial"] = trial
+                        performance_test["Approach"] = approach
+                        performance_test["Approach_trial"] = i
+                        performance_test["data_order"] = data_ord
+                        performance_test_df = pd.concat([performance_test_df, performance_test])
+
+                        # Prediction df
+                        predictions_test = model_eval_test.predictions
+                        predictions_test["trial"] = trial
+                        predictions_test["Approach"] = approach
+                        predictions_test["Approach_trial"] = i
+                        predictions_test["data_order"] = data_ord
+                        predictions_test_df = pd.concat([predictions_test_df, predictions_test])
+
+                        del best_model, best_params, all_results, ml_model
+
+                if approach == 'Complete set':
+                    break
+
+    parameter_df = pd.DataFrame(parameter_resume)
+
+    # Save results
+    if data_ord == 'y_rand':
+        result_path = create_directory('./regression_results/y_rand/')
+        performance_train_df.to_csv(os.path.join(result_path, f'performance_train_y_rand.csv'))
+        performance_train_df.to_csv(os.path.join(result_path, f'performance_train_gcn_y_rand.csv'))
+        performance_test_df.to_csv(os.path.join(result_path, f'performance_test_gcn_y_rand.csv'))
+        parameter_df.to_csv(os.path.join(result_path, f'model_best_parameters_gcn_y_rand.csv'))
+        predictions_test_df.to_csv(os.path.join(result_path, f'predictions_test_gcn_y_rand.csv'))
+        predictions_train_df.to_csv(os.path.join(result_path, f'predictions_train_gcn_y_rand.csv'))
+    else:
+        result_path = create_directory('./regression_results/regular/')
+        performance_train_df.to_csv(os.path.join(result_path, f'performance_train_gcn.csv'))
+        performance_test_df.to_csv(os.path.join(result_path, f'performance_test_gcn.csv'))
+        parameter_df.to_csv(os.path.join(result_path, f'model_best_parameters_gcn.csv'))
+        predictions_test_df.to_csv(os.path.join(result_path, f'predictions_test_gcn.csv'))
+        predictions_train_df.to_csv(os.path.join(result_path, f'predictions_train_gcn.csv'))
+
+
+
+================================================
+FILE: gcn_models_cluster_potent_sets.ipynb
+================================================
+# Jupyter notebook converted to Python script.
+
+#Utils
+from tqdm.notebook import tqdm
+from ml_utils import *
+from machine_learning_models import *
+from fingerprints import *
+import deepchem as dc
+from deepchem.models import GraphConvModel
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+%load_ext autoreload
+%autoreload 2
+# Output:
+#   The autoreload extension is already loaded. To reload it, use:
+
+#     %reload_ext autoreload
+
+
+"""
+# Load Data
+"""
+
+# Load CCR results path
+ccr_path = "./ccr_results/"
+# Load actives dB
+db_path = './dataset/'
+#Load active db
+regression_db = pd.read_csv(os.path.join(db_path, f'chembl_30_IC50_10_tids_1000_CPDs.csv'))
+# Target Classes
+regression_tids = regression_db.chembl_tid.unique()[:]
+
+"""
+# Models Parameters
+### Select the desired parameters to be used by regression models
+<p>
+<li> <b>model_list</b>: ML/DL models for regression (kNN: k-neirest neighbor, SVR: Support Vector Regression, RFR: Random Forest Regression, DNN: Deep Neural Network, MR: Median regression)</li>
+</p>
+<p>
+<li> <b>compound_sets</b>: Compound sets to be generated ('Cluster set': Largest Analogue series, ' Potent set': Most potent compounds) </li>
+</p>
+<p>
+<li> <b>potent_size</b>: Potent sets size to be generated (0.1 = 10% original set) </li>
+</p>
+
+<p>
+<li> <b>params_dict</b>: GCN hyperparameter grid (nb_epoch: number of epochs, learning_rate, graph_conv_layer, dense_layer_size, dropout, number of atom features) </li>
+</p>
+
+"""
+
+model_list = ['GCN']
+compound_sets = ['Potent set', 'Cluster set']
+potent_size = 0.1
+params_dict = {
+    "nb_epoch":[100, 200],
+    "learning_rate":[0.01, 0.001],
+    "n_tasks":[1],
+    "graph_conv_layers":[[64, 64], [256, 256], [512, 512], [1024, 1024]],
+    "dense_layer_size":[64, 256, 512, 1024],
+    "dropout":[0.0],
+    "mode":["regression"],
+    "number_atom_features":[75],}
+
+performance_train_df = pd.DataFrame()
+performance_test_df = pd.DataFrame()
+predictions_test_df = pd.DataFrame()
+predictions_train_df = pd.DataFrame()
+parameter_resume = []
+
+for target in tqdm(regression_tids):
+    for approach in compound_sets:
+            print(f'Training on {target} {approach}')
+
+            # Select Target Database
+            regression_db_tid = regression_db.loc[regression_db.chembl_tid == target]
+
+            if approach == 'Cluster set':
+
+                #Load CCR database
+                ccr_df = pd.read_csv(os.path.join(ccr_path, f'CCR_C30_IC50_HT_single_5_0.666_13_{target}.csv'))
+
+                #Load largest analogue series
+                ccr_df_AS = ccr_df.loc[ccr_df['Core'] == ccr_df['Core'].value_counts().index[0]].chembl_id.values
+
+                # Select Training and Test datasets
+                df_TR = regression_db_tid.loc[~regression_db_tid['chembl_cid'].isin(ccr_df_AS)]
+                df_TE = regression_db_tid.loc[regression_db_tid['chembl_cid'].isin(ccr_df_AS)]
+
+            elif approach == 'Potent set':
+
+                # Select Training and Test datasets
+                df_TE = regression_db_tid.nlargest(int(round(len(regression_db_tid.index)*potent_size, 0)), 'pPot')
+                df_TR = regression_db_tid.loc[~regression_db_tid['chembl_cid'].isin(df_TE['chembl_cid'])]
+
+            # Generate Mol object from SMILES
+            mols_tr = [Chem.MolFromSmiles(smi) for smi in df_TR.nonstereo_aromatic_smiles.tolist()]
+            mols_te = [Chem.MolFromSmiles(smi) for smi in df_TE.nonstereo_aromatic_smiles.tolist()]
+
+            # Constructing mol featurizer
+            featurizer = dc.feat.ConvMolFeaturizer()
+            mol_graphs_tr = featurizer.featurize(mols_tr)
+            mol_graphs_te = featurizer.featurize(mols_te)
+            mol_graphs = np.concatenate((mol_graphs_tr, mol_graphs_te))
+
+            # Potency values
+            potency = np.concatenate((np.array(df_TE.pPot.values), np.array(df_TR.pPot.values)))
+            
+            # Compound Ids
+            ids = np.concatenate((np.array(df_TR.chembl_tid.values), np.array(df_TE.chembl_tid.values)))
+
+            # Constructing Deepchem Datasets
+            dataset = dc.data.NumpyDataset(X=mol_graphs, y=potency, ids=ids)
+            training_set_u = dc.data.NumpyDataset(X=mol_graphs_tr, y=np.array(df_TR.pPot.values), ids=np.array(df_TR.chembl_tid.values))
+            test_set_u = dc.data.NumpyDataset(X=mol_graphs_te, y=np.array(df_TE.pPot.values), ids=np.array(df_TE.chembl_tid.values))
+
+            # Initialize transformers
+            transformers = [dc.trans.NormalizationTransformer(transform_y=True, dataset=training_set_u, move_mean=True)]
+
+            #Transform data
+            for transformer in transformers:
+                training_set = transformer.transform(training_set_u)
+            for transformer in transformers:
+                test_set = transformer.transform(test_set_u)
+
+            for trial in range(1):
+
+                # Split dataset into TR and internal Validation
+                splitter = dc.splits.RandomSplitter()
+                train_set, valid_set = splitter.train_test_split(training_set, seed=trial)
+
+                print(f'Starting Trial {trial}')
+                for model in model_list:
+
+                    #Define random seed
+                    set_seeds(trial)
+
+                    #Initialize GridSearch optimizer
+                    optimizer = dc.hyper.GridHyperparamOpt(dc.models.GraphConvModel)
+
+                    # Select optimization metric (MAE)
+                    metric = dc.metrics.Metric(dc.metrics.mae_score)
+
+                    # Best GCN model, parameters and final results
+                    best_model, best_params, all_results = optimizer.hyperparam_search(params_dict=params_dict,
+                                                                                       train_dataset=train_set,
+                                                                                       valid_dataset=valid_set,
+                                                                                       metric=metric,
+                                                                                       use_max=False,
+                                                                                       output_transformers=transformers,
+                                                                                       #logdir=r'C:\\GCN\\'
+                                                                                       )
+                    # Define final GCN model
+                    def final_gcn(data, best_params):
+
+                        gcn = GraphConvModel(n_tasks=best_params["n_tasks"],
+                                       graph_conv_layers=best_params["graph_conv_layers"],
+                                       dropout=best_params["dropout"],
+                                        mode=best_params["mode"],
+                                       predictor_hidden_feats=best_params["dense_layer_size"],
+                                       learning_rate=best_params["learning_rate"],
+                                       )
+
+                        gcn.fit(data, nb_epoch=best_params["nb_epoch"])
+
+                        return gcn
+
+                    #Best model parameters
+                    opt_parameters_dict = {'model': model,
+                                           'trial': trial,
+                                           'Target ID': target,
+                                           'Approach':approach}
+
+                    if isinstance(best_params, tuple):
+                        best_params = {
+                            "nb_epoch":best_params[0],
+                            "learning_rate":best_params[1],
+                            "n_tasks":best_params[2],
+                            "graph_conv_layers":best_params[3],
+                            "dense_layer_size":best_params[4],
+                            "dropout":best_params[5],
+                            "mode":best_params[6],
+                            "number_atom_features":best_params[7]}
+
+                    for param, value in best_params.items():
+                        opt_parameters_dict[param] = value
+                    parameter_resume.append(opt_parameters_dict)
+
+                    # Generate final Model
+                    ml_model = final_gcn(training_set, best_params)
+
+                    # evaluate the model
+                    train_score = ml_model.evaluate(training_set, [metric], transformers)
+                    test_score = ml_model.evaluate(test_set, [metric], transformers)
+
+                    #TRAIN
+                    #Model Evaluation
+                    model_eval_train = Model_Evaluation(ml_model, training_set, training_set_u.y, transformers[0], model_id=model)
+
+                    #Performance df
+                    performance_train = model_eval_train.pred_performance
+                    performance_train["trial"] = trial
+                    performance_train["Approach"] = approach
+                    performance_train_df = pd.concat([performance_train_df, performance_train])
+
+                    # Prediction df
+                    predictions_train = model_eval_train.predictions
+                    predictions_train["trial"] = trial
+                    predictions_train["Approach"] = approach
+                    predictions_train_df = pd.concat([predictions_train_df, predictions_train])
+
+                    #Model Evaluation
+                    model_eval_test = Model_Evaluation(ml_model, test_set, test_set_u.y, transformers[0], model_id=model)
+
+                    #Performance df
+                    performance_test = model_eval_test.pred_performance
+                    performance_test["trial"] = trial
+                    performance_test["Approach"] = approach
+                    performance_test_df = pd.concat([performance_test_df, performance_test])
+
+                    # Prediction df
+                    predictions_test = model_eval_test.predictions
+                    predictions_test["trial"] = trial
+                    predictions_test["Approach"] = approach
+                    predictions_test_df = pd.concat([predictions_test_df, predictions_test])
+
+                    del best_model, best_params, all_results, ml_model
+
+parameter_df = pd.DataFrame(parameter_resume)
+
+# Save Final Dataframes
+result_path = create_directory('./regression_results/cluster_potent/')
+performance_train_df.to_csv(os.path.join(result_path, f'performance_train_gcn_cluster_potent.csv'))
+performance_test_df.to_csv(os.path.join(result_path, f'performance_test_gcn_cluster_potent.csv'))
+parameter_df.to_csv(os.path.join(result_path, f'model_best_parameters_gcn_cluster_potent.csv'))
+predictions_test_df.to_csv(os.path.join(result_path, f'predictions_test_gcn_cluster_potent.csv'))
+predictions_train_df.to_csv(os.path.join(result_path, f'predictions_train_gcn_cluster_potent.csv'))
+
+
+
+================================================
+FILE: LICENSE
+================================================
+MIT License
+
+Copyright (c) 2022 Tiago Janela
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+
+================================================
+FILE: machine_learning_models.py
+================================================
+import itertools
+from typing import *
+import numpy as np
+import pandas as pd
+import os
+import random
+
+# Tensorflow/Keras
+import keras
+import tensorflow as tf
+from tensorflow import keras
+from keras import backend as K, Model
+from keras.callbacks import EarlyStopping
+from keras.layers import Dense, Dropout, Lambda, Input
+
+# Sklearn
+from sklearn import neighbors, metrics
+from sklearn.metrics import mean_absolute_error
+from sklearn.dummy import DummyRegressor
+from sklearn.svm import SVR, SVC
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+
+from ml_utils import tanimoto_from_sparse, untransform_data
+import warnings
+
+warnings.filterwarnings('ignore')
+pd.options.mode.chained_assignment = None
+
+def set_seeds(seed):
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    random.seed(seed)
+    tf.random.set_seed(seed)
+    np.random.seed(seed)
+
+
+def set_global_determinism(seed):
+    set_seeds(seed=seed)
+
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
+
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+
+class Dataset:
+    def __init__(self, features: np.array, labels: np.array):
+        self.features = features
+        self.labels = labels
+        self._add_instances = set()
+
+    def add_instance(self, name, values: np.array):
+        self._add_instances.add(name)
+        self.__dict__[name] = values
+
+    @property
+    def columns(self) -> dict:
+        data_dict = {k: v for k, v in self.__dict__.items()}
+        data_dict['features'] = self.features
+        data_dict['labels'] = self.labels
+        return data_dict
+
+    def __len__(self):
+        return self.labels.shape[0]
+
+    def __iter__(self):
+        return (self[i] for i in range(len(self)))
+
+    def __getitem__(self, idx):
+        if isinstance(idx, int):
+            return {col: values[idx] for col, values in self.columns.items()}
+
+        subset = Dataset(self.features[idx], self.labels[idx])
+        for addt_instance in self._add_instances:
+            subset.add_instance(addt_instance, self.__dict__[addt_instance][idx])
+
+        return subset
+
+
+class MLModel:
+    def __init__(self, data, ml_algorithm, reg_class="regression",
+                 parameters='grid', cv_fold=10, random_seed=2002):
+
+        self.data = data
+        self.ml_algorithm = ml_algorithm
+        self.reg_class = reg_class
+        self.cv_fold = cv_fold
+        self.seed = random_seed
+        self.parameters = parameters
+        self.h_parameters = self.hyperparameters()
+        self.model, self.cv_results = self.cross_validation()
+        self.best_params = self.optimal_parameters()
+        self.model = self.final_model()
+
+    def hyperparameters(self):
+        if self.parameters == "grid":
+            if self.reg_class == "regression":
+                if self.ml_algorithm == "MR":
+                    return {'strategy': ['median']
+                            }
+                elif self.ml_algorithm == "SVR":
+                    return {'C': [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 10, 100, 10000],
+                            'kernel': [tanimoto_from_sparse],
+                            }
+                elif self.ml_algorithm == "RFR":
+                    return {'n_estimators': [25, 100, 200],
+                            'max_features': ['auto'],
+                            'min_samples_split': [2, 3, 5],
+                            'min_samples_leaf': [1, 2, 5],
+                            }
+                elif self.ml_algorithm == "kNN":
+                    return {"n_neighbors": [1, 3, 5]
+                            }
+
+            if self.reg_class == "classification":
+                if self.ml_algorithm == "SVM":
+                    return {'C': [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 10],
+                            'kernel': [tanimoto_from_sparse],
+                            }
+                elif self.ml_algorithm == "RFC":
+                    return {'n_estimators': [25, 100, 200],
+                            'max_features': ['auto'],
+                            'min_samples_split': [2, 3, 5],
+                            'min_samples_leaf': [1, 2, 5],
+                            }
+
+
+    def cross_validation(self):
+
+        if self.reg_class == "regression":
+            opt_metric = "neg_mean_absolute_error"
+            if self.ml_algorithm == "MR":
+                model = DummyRegressor()
+            elif self.ml_algorithm == "SVR":
+                model = SVR()
+            elif self.ml_algorithm == "RFR":
+                model = RandomForestRegressor(random_state=self.seed)
+            elif self.ml_algorithm == "kNN":
+                model = neighbors.KNeighborsRegressor()
+
+        elif self.reg_class == "classification":
+            opt_metric = "balanced_accuracy"
+            if self.ml_algorithm == "SVM":
+                model = SVC()
+            elif self.ml_algorithm == "RFC":
+                model = RandomForestClassifier()
+
+        cv_results = GridSearchCV(model,
+                                  param_grid=self.h_parameters,
+                                  cv=self.cv_fold,
+                                  scoring=opt_metric,
+                                  n_jobs=-1)
+        cv_results.fit(self.data.features, self.data.labels)
+
+        return model, cv_results
+
+    def optimal_parameters(self):
+        best_params = self.cv_results.cv_results_['params'][self.cv_results.best_index_]
+        return best_params
+
+    def final_model(self):
+        model = self.model.set_params(**self.best_params)
+        return model.fit(self.data.features, self.data.labels)
+
+
+class DNN:
+    def __init__(self, data, ml_algorithm, n_features, seed, reg_class="regression", parameters='grid'):
+
+        self.data = data
+        self.ml_algorithm = ml_algorithm
+        self.n_features = n_features
+        self.reg_class = reg_class
+        self.parameters = parameters
+        self.seed = seed
+        self.h_parameters = self.dnn_hyperparameters()
+        self.model = self.dnn_model()
+        self.cv_results = self.dnn_cross_validation()
+        self.best_params = self.dnn_select_best_parameters()
+        self.model = self.final_model()
+        self.final_model = self.fit_model()
+
+    def dnn_hyperparameters(self):
+        if self.parameters == "grid":
+            return {
+                "layers": [(100, 100), (250, 250), (250, 500), (500, 250), (500, 250, 100), (100, 250, 500)],
+                "dropout": [0.0, 0.25, 0.5],
+                "activation": ['tanh'],
+                "learning_rate": [0.1, 0.01, 0.001],
+                "n_epochs": [200]
+            }
+
+    def dnn_model(self, layers=None, dropout_rate: float = 0, activation_f: str = "tanh",
+                  learning_rate: float = 0.01, n_features: int = None, seed: int = None, ):
+
+        #set seed
+        tf.keras.utils.set_random_seed(self.seed)
+        tf.config.experimental.enable_op_determinism()
+
+        if layers is None:
+            layers = (100, 100)
+
+        inputs = keras.Input(shape=(self.n_features,), name="input_layer")
+
+        for i, net_nodes in enumerate(layers, 1):
+            if i == 1:
+                layer = Dense(int(net_nodes), activation=activation_f, name=f'Dense_{i}')(inputs)
+                layer = Dropout(dropout_rate)(layer)
+            elif i == len(layers):
+                if self.reg_class == "regression":
+                    layer_reg = Dense(1, activation="linear")(layer)
+                else:
+                    layer_class = Dense(2, activation="sigmoid")(layer)
+            else:
+                layer = Dense(int(net_nodes), activation=activation_f, name=f'Dense_{i}')(layer)
+                layer = Dropout(dropout_rate)(layer)
+
+        if self.reg_class == "regression":
+            model = Model(inputs, layer_reg, name='DNN_model')
+            loss = 'mean_absolute_error'
+            opt_metric = ["mean_absolute_error"]
+        else:
+            model = Model(inputs, layer_class, name='DNN_model')
+            loss = 'sparse_categorical_crossentropy'
+            opt_metric = ["accuracy"]
+
+        model.compile(loss=loss,
+                      optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+                      metrics=opt_metric)
+
+        return model
+
+    def dnn_cross_validation(self) -> Dict:
+
+        """
+         Grid Search for parameter optimization
+
+        """
+        # initialize hyper-parameters
+        hyperparameters = self.h_parameters
+
+        # Build grid for all parameters
+        parameter_grid = itertools.product(*hyperparameters.values())
+
+        grid_search_results = dict()
+
+        for i, grid_comb in enumerate(parameter_grid):
+            # Start Grid-Search
+            nn_layers, dropout_rate, activation, learning_rate, train_epochs = grid_comb
+
+            # Build the model for each grid setup
+            model = self.dnn_model(layers=nn_layers,
+                                   dropout_rate=dropout_rate,
+                                   activation_f=activation,
+                                   learning_rate=learning_rate,
+                                   n_features=self.n_features,
+                                   )
+
+            # EarlyStopping
+            earlystopping = EarlyStopping(monitor='val_loss', patience=50, verbose=0)
+
+            # Model training and validation
+            history = model.fit(self.data.features.toarray(), self.data.labels,
+                                batch_size=32,
+                                epochs=train_epochs,
+                                validation_split=0.2,
+                                callbacks=[earlystopping],
+                                verbose=0)
+
+            # Retrieve the trained parameters from the model
+            grid_search_results[grid_comb] = history
+
+        return grid_search_results
+
+    def dnn_select_best_parameters(self):
+
+        """
+        Grid Search selection of best parameters
+
+        """
+        grid_search_results = []
+
+        for param_comb, fitted_model in self.cv_results.items():
+            # Model Training history
+            history_data = pd.DataFrame(fitted_model.history)
+
+            # Save stopping epoch
+            history_data = history_data.reset_index().rename(columns={"index": "on_epoch"})
+            history_data["on_epoch"] = history_data["on_epoch"].apply(lambda x: x + 1)
+
+            # Select loss with minimum validation loss
+            best_per_model = history_data.loc[history_data["val_loss"].idxmin(skipna=True)].rename(param_comb)
+            grid_search_results.append(best_per_model)
+
+        # Concatenate all models training results
+        grid_search_results = pd.concat(grid_search_results, axis=1).T
+
+        # select optimal hyperparameter settings
+        optimal_stats = grid_search_results.loc[grid_search_results["val_loss"].idxmin(skipna=True)]
+        opt_setting = {k: v for k, v in zip(self.h_parameters.keys(), optimal_stats.name)}
+        opt_setting.update(optimal_stats.to_dict())
+
+        return opt_setting
+
+    def final_model(self):
+
+        dnn = self.dnn_model(self.best_params["layers"],
+                             self.best_params["dropout"],
+                             self.best_params["activation"],
+                             self.best_params["learning_rate"],
+                             n_features=self.n_features
+                             )
+
+        return dnn
+
+    def fit_model(self):
+
+        # define early stopping object
+        earlystopping = EarlyStopping(monitor='loss', patience=50, verbose=0)
+
+        # train the model on the entire training set
+        best_model = self.model.fit(self.data.features.toarray(), self.data.labels,
+                                    batch_size=32,
+                                    epochs=200,
+                                    validation_split=None,
+                                    callbacks=[earlystopping],
+                                    verbose=0)
+
+        return best_model
+
+
+class Model_Evaluation:
+    def __init__(self, model, data, data_label, data_transformer=None, model_id=None, reg_class="regression"):
+        self.reg_class = reg_class
+        self.model_id = model_id
+        self.data_transformer = data_transformer
+        self.model = model
+        self.data = data
+        self.data_labels = data_label
+        self.labels, self.y_pred, self.predictions = self.model_predict(data)
+        self.pred_performance = self.prediction_performance(data)
+
+    def model_predict(self, data):
+
+        if self.model_id == 'GCN':
+            y_prediction = self.data_transformer.untransform(self.model.predict(data).flatten())
+            labels = list(self.data_labels)
+
+        elif self.model.ml_algorithm == 'DNN':
+            y_prediction = self.model.model.predict(data.features.toarray(), verbose=0).flatten()
+            labels = data.labels
+
+        else:
+            y_prediction = self.model.model.predict(data.features)
+            labels = data.labels
+
+        predictions = pd.DataFrame(list(zip(labels, y_prediction)), columns=["true", "predicted"])
+
+        if self.model_id == 'GCN':
+            predictions['Target ID'] = data.ids
+            predictions['algorithm'] = self.model_id
+        else:
+            predictions['Target ID'] = data.target[0]
+            predictions['algorithm'] = self.model.ml_algorithm
+
+
+        return labels, y_prediction, predictions
+
+    def prediction_performance(self, data, y_score=None, nantozero=False) -> pd.DataFrame:
+
+        if self.reg_class == 'classification':
+            fill = 0 if nantozero else np.nan
+            if sum(self.y_pred) == 0:
+                mcc = fill
+                precision = fill
+            else:
+                mcc = metrics.matthews_corrcoef(data.labels, self.y_pred)
+                precision = metrics.precision_score(data.labels, self.y_pred)
+
+            result_list = [{"MCC": mcc,
+                            "F1": metrics.f1_score(data.labels, self.y_pred),
+                            "BA": metrics.balanced_accuracy_score(data.labels, self.y_pred),
+                            "Precision": precision,
+                            "Recall": metrics.recall_score(data.labels, self.y_pred),
+                            "Average Precision": metrics.average_precision_score(data.labels, self.y_pred),
+                            "data_set_size": data.labels.shape[0],
+                            "true_pos": len([x for x in data.labels if x == 1]),
+                            "true_neg": len([x for x in data.labels if x == 0]),
+                            "predicted_pos": len([x for x in self.y_pred if x == 1]),
+                            "predicted_neg": len([x for x in self.y_pred if x == 0])},
+                           ]
+
+            if y_score is not None:
+                result_list.append({"AUC": metrics.roc_auc_score(data.labels, self.y_pred)})
+            else:
+                result_list.append({"AUC": np.nan})
+
+            results = pd.DataFrame(result_list)
+            results = results[
+                ["Target ID", "Algorithm", "MCC", "F1", "BA", "Precision", "Recall", "Average Precision"]]
+            results["Target ID"] = results["Target ID"].map(lambda x: x.lstrip("CHEMBL").rstrip(""))
+            results.set_index(["Target ID", "Algorithm"], inplace=True)
+            results.columns = pd.MultiIndex.from_product([["Value"],
+                                                          ["MCC", "F1", "BA", "Precision", "Recall",
+                                                           "Average Precision"]], names=["Value", "Metric"])
+            results = results.stack().reset_index().set_index("Target ID")
+
+            return results
+
+        elif self.reg_class == "regression":
+
+            labels = self.labels
+            pred = self.y_pred
+
+            fill = 0 if nantozero else np.nan
+            if len(pred) == 0:
+                mae = fill
+                mse = fill
+                rmse = fill
+                r2 = fill
+            else:
+                mae = mean_absolute_error(labels, pred)
+                mse = metrics.mean_squared_error(labels, pred)
+                rmse = metrics.mean_squared_error(labels, pred, squared=False)
+                r2 = metrics.r2_score(labels, pred)
+
+            if self.model_id == 'GCN':
+                target = list(self.data.ids)[0]
+                model_name = self.model_id
+            else:
+                target = data.target[0]
+                model_name = self.model.ml_algorithm
+
+            result_list = [{"MAE": mae,
+                            "MSE": mse,
+                            "RMSE": rmse,
+                            "R2": r2,
+                            "data_set_size": len(labels),
+                            "Target ID": target,
+                            "Algorithm": model_name}
+                           ]
+
+            # Prepare result dataset
+            results = pd.DataFrame(result_list)
+            results = results[["Target ID", "Algorithm", "MAE", "MSE", "RMSE", "R2"]]
+            results["Target ID"] = results["Target ID"].map(lambda x: x.lstrip("CHEMBL").rstrip(""))
+            results.set_index(["Target ID", "Algorithm"], inplace=True)
+            results.columns = pd.MultiIndex.from_product([["Value"], ["MAE", "MSE", "RMSE", "R2"]],
+                                                         names=["Value", "Metric"])
+            results = results.stack().reset_index().set_index("Target ID")
+
+            return results
+
+
+
+
+================================================
+FILE: ML_env.yml
+================================================
+name: ML_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - _tflow_select=2.3.0
+  - abseil-cpp=20211102.0
+  - absl-py=1.2.0
+  - aiohttp=3.8.1
+  - aiosignal=1.2.0
+  - argon2-cffi=21.3.0
+  - argon2-cffi-bindings=21.2.0
+  - asttokens=2.0.8
+  - astunparse=1.6.3
+  - async-timeout=4.0.2
+  - attrs=22.1.0
+  - backcall=0.2.0
+  - backports=1.0
+  - backports.functools_lru_cache=1.6.4
+  - beautifulsoup4=4.11.1
+  - bleach=5.0.1
+  - blinker=1.4
+  - boost=1.74.0
+  - boost-cpp=1.74.0
+  - brotli=1.0.9
+  - brotli-bin=1.0.9
+  - brotlipy=0.7.0
+  - bzip2=1.0.8
+  - ca-certificates=2022.6.15
+  - cached-property=1.5.2
+  - cached_property=1.5.2
+  - cachetools=5.2.0
+  - cairo=1.16.0
+  - certifi=2022.6.15
+  - cffi=1.15.1
+  - charset-normalizer=2.1.1
+  - click=8.1.3
+  - colorama=0.4.5
+  - cryptography=37.0.4
+  - cycler=0.11.0
+  - debugpy=1.6.3
+  - decorator=5.1.1
+  - deepchem=2.6.1
+  - defusedxml=0.7.1
+  - entrypoints=0.4
+  - executing=1.0.0
+  - flit-core=3.7.1
+  - fonttools=4.37.1
+  - freetype=2.12.1
+  - frozenlist=1.3.1
+  - gettext=0.19.8.1
+  - giflib=5.2.1
+  - glib=2.72.1
+  - glib-tools=2.72.1
+  - google-auth=2.11.0
+  - google-auth-oauthlib=0.4.6
+  - google-pasta=0.2.0
+  - greenlet=1.1.3
+  - grpcio=1.43.0
+  - gst-plugins-base=1.20.3
+  - gstreamer=1.20.3
+  - h5py=3.7.0
+  - hdf5=1.12.2
+  - icu=58.2
+  - idna=3.3
+  - importlib-metadata=4.11.4
+  - importlib_resources=5.9.0
+  - intel-openmp=2022.1.0
+  - ipykernel=6.15.2
+  - ipython=8.4.0
+  - ipython_genutils=0.2.0
+  - ipywidgets=8.0.1
+  - jedi=0.18.1
+  - jinja2=3.1.2
+  - joblib=1.1.0
+  - jpeg=9e
+  - jsonschema=4.15.0
+  - jupyter=1.0.0
+  - jupyter_client=7.3.5
+  - jupyter_console=6.4.4
+  - jupyter_core=4.11.1
+  - jupyterlab_pygments=0.2.2
+  - jupyterlab_widgets=3.0.2
+  - keras=2.9.0
+  - kiwisolver=1.4.4
+  - krb5=1.19.3
+  - lcms2=2.12
+  - lerc=4.0.0
+  - libblas=3.9.0
+  - libbrotlicommon=1.0.9
+  - libbrotlidec=1.0.9
+  - libbrotlienc=1.0.9
+  - libcblas=3.9.0
+  - libclang13=14.0.6
+  - libcurl=7.84.0
+  - libdeflate=1.13
+  - libffi=3.4.2
+  - libglib=2.72.1
+  - libiconv=1.16
+  - liblapack=3.9.0
+  - libogg=1.3.4
+  - libpng=1.6.37
+  - libprotobuf=3.20.1
+  - libsodium=1.0.18
+  - libsqlite=3.39.2
+  - libssh2=1.10.0
+  - libtiff=4.4.0
+  - libvorbis=1.3.7
+  - libwebp-base=1.2.4
+  - libxcb=1.13
+  - libxml2=2.9.14
+  - libxslt=1.1.35
+  - libzlib=1.2.12
+  - lxml=4.9.1
+  - m2w64-gcc-libgfortran=5.3.0
+  - m2w64-gcc-libs=5.3.0
+  - m2w64-gcc-libs-core=5.3.0
+  - m2w64-gmp=6.1.0
+  - m2w64-libwinpthread-git=5.0.0.4634.697f757
+  - markdown=3.4.1
+  - markupsafe=2.1.1
+  - matplotlib-base=3.5.3
+  - matplotlib-inline=0.1.6
+  - mistune=2.0.4
+  - mkl=2022.1.0
+  - msys2-conda-epoch=20160418
+  - multidict=6.0.2
+  - munkres=1.1.4
+  - nbclient=0.6.7
+  - nbconvert=7.0.0
+  - nbconvert-core=7.0.0
+  - nbconvert-pandoc=7.0.0
+  - nbformat=5.4.0
+  - nest-asyncio=1.5.5
+  - notebook=6.4.12
+  - numpy=1.23.2
+  - oauthlib=3.2.0
+  - openjpeg=2.5.0
+  - openssl=1.1.1q
+  - opt_einsum=3.3.0
+  - packaging=21.3
+  - pandas=1.4.4
+  - pandoc=2.19.2
+  - pandocfilters=1.5.0
+  - parso=0.8.3
+  - patsy=0.5.2
+  - pcre=8.45
+  - pickleshare=0.7.5
+  - pillow=9.2.0
+  - pip=22.2.2
+  - pixman=0.38.0
+  - pkgutil-resolve-name=1.3.10
+  - ply=3.11
+  - prometheus_client=0.14.1
+  - prompt-toolkit=3.0.30
+  - prompt_toolkit=3.0.30
+  - psutil=5.9.1
+  - pthread-stubs=0.4
+  - pure_eval=0.2.2
+  - pyasn1=0.4.8
+  - pyasn1-modules=0.2.7
+  - pycairo=1.21.0
+  - pycparser=2.21
+  - pygments=2.13.0
+  - pyjwt=2.4.0
+  - pyopenssl=22.0.0
+  - pyparsing=3.0.9
+  - pyqt=5.9.2
+  - pyqt5-sip=12.11.0
+  - pyrsistent=0.18.1
+  - pysocks=1.7.1
+  - python=3.9.13
+  - python-dateutil=2.8.2
+  - python-fastjsonschema=2.16.1
+  - python_abi=3.9
+  - pytz=2022.2.1
+  - pyu2f=0.1.5
+  - pywin32=303
+  - pywinpty=2.0.7
+  - pyzmq=23.2.1
+  - qt=5.9.7
+  - qtconsole=5.3.2
+  - qtconsole-base=5.3.2
+  - qtpy=2.2.0
+  - rdkit=2022.03.5
+  - reportlab=3.5.68
+  - requests=2.28.1
+  - requests-oauthlib=1.3.1
+  - rsa=4.9
+  - scikit-learn=1.1.2
+  - scipy=1.9.1
+  - seaborn=0.11.2
+  - seaborn-base=0.11.2
+  - send2trash=1.8.0
+  - setuptools=65.3.0
+  - sip=4.19.13
+  - six=1.16.0
+  - snappy=1.1.9
+  - soupsieve=2.3.2.post1
+  - sqlalchemy=1.4.40
+  - sqlite=3.39.2
+  - stack_data=0.5.0
+  - statsmodels=0.13.2
+  - tbb=2021.5.0
+  - tensorboard=2.9.0
+  - tensorboard-data-server=0.6.0
+  - tensorboard-plugin-wit=1.8.1
+  - tensorflow=2.9.1
+  - tensorflow-base=2.9.1
+  - tensorflow-estimator=2.9.0
+  - termcolor=1.1.0
+  - terminado=0.15.0
+  - threadpoolctl=3.1.0
+  - tinycss2=1.1.1
+  - tk=8.6.12
+  - toml=0.10.2
+  - tornado=6.2
+  - tqdm=4.64.0
+  - traitlets=5.3.0
+  - typing-extensions=4.3.0
+  - typing_extensions=4.3.0
+  - tzdata=2022c
+  - ucrt=10.0.20348.0
+  - unicodedata2=14.0.0
+  - urllib3=1.26.11
+  - vc=14.2
+  - vs2015_runtime=14.29.30139
+  - wcwidth=0.2.5
+  - webencodings=0.5.1
+  - werkzeug=2.2.2
+  - wheel=0.37.1
+  - widgetsnbextension=4.0.2
+  - win_inet_pton=1.1.0
+  - winpty=0.4.3
+  - wrapt=1.14.1
+  - xorg-libxau=1.0.9
+  - xorg-libxdmcp=1.1.3
+  - xz=5.2.6
+  - yarl=1.7.2
+  - zeromq=4.3.4
+  - zipp=3.8.1
+  - zlib=1.2.12
+  - zstd=1.5.2
+  - pip:
+    - flatbuffers==1.12
+    - gast==0.4.0
+    - keras-preprocessing==1.1.2
+    - libclang==14.0.6
+    - protobuf==3.19.4
+    - pydot==1.4.2
+    - tensorflow-gpu==2.9.1
+    - tensorflow-io-gcs-filesystem==0.26.0
+prefix: C:\Users\janela\Anaconda3\envs\ML_env
+
+
+
+================================================
+FILE: ml_models.ipynb
+================================================
+# Jupyter notebook converted to Python script.
+
+"""
+# Load Libraries
+"""
+
+#Utils
+from ml_utils import *
+from machine_learning_models import *
+from fingerprints import *
+import random
+#from IPython.core.display_functions import display
+from tqdm.notebook import tqdm
+import pickle
+#Sklearn
+from sklearn.model_selection import ShuffleSplit
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+%load_ext autoreload
+%autoreload 2
+
+"""
+# Models Parameters
+### Select the desired parameters to be used by regression models
+<p>
+<li> <b>model_list</b>: ML/DL models for regression (kNN: k-neirest neighbor, SVR: Support Vector Regression, RFR: Random Forest Regression, DNN: Deep Neural Network, MR: Median regression)</li>
+</p>
+<p>
+<li> <b>cv_fold</b>: Number do data splits (trials) to be performed</li>
+</p>
+<p>
+<li> <b>opt_metric</b>: Optimization metric to be use for model optimization (MAE: 'neg_mean_absolute_error', MSE: ‘neg_mean_squared_error’)</li>
+</p>
+<p>
+<li> <b>data_order</b>: Different data orders ('regular': Normal potency (y) order, 'y_rand': Randomized potency values) </li>
+</p>
+<p>
+<li> <b>compound_sets</b>: Compound sets to be generated ('Complete set': 100% compounds, 'Random set': Random set of compounds, 'Diverse set': Chemical diverse set of compounds) </li>
+</p>
+<p>
+<li> <b>compound_sets_size</b>: Compound sets size to be generated for 'Random' and 'Diverse' based on the size of the respective 'Complete' ('Complete set': 100% compounds, 'Random set': 25%, 'Diverse set': 25%) </li>
+</p>
+
+
+
+"""
+
+model_list = ['kNN', 'SVR', 'DNN', 'RFR', 'MR']
+cv_folds=10
+opt_metric = "neg_mean_absolute_error"
+data_order = ['regular'] #
+compound_sets = ['Complete set', 'Random set', 'Diverse set']
+compound_sets_size = 0.25
+
+"""
+
+# Load Data
+### Load compound database to be used for the regression models
+
+<li> <b>db_path</b>: dataset full path</li>
+</p>
+"""
+
+# Database path
+db_path = './dataset/'
+# Load actives dB
+regression_db = pd.read_csv(os.path.join(db_path, f'chembl_30_IC50_10_tids_1000_CPDs.csv'))
+# Regression Compound Targets
+regression_tids = regression_db.chembl_tid.unique()[:10]
+
+"""
+# Models
+"""
+
+# Final Dataframes
+performance_train_df = pd.DataFrame()
+predictions_train_df = pd.DataFrame()
+performance_test_df = pd.DataFrame()
+predictions_test_df = pd.DataFrame()
+parameter_resume = []
+
+# Generate Molecular Fingerprints
+morgan_radius2 = FoldedMorganFingerprint(radius=2)
+morgan_radius2.fit_smiles(regression_db.nonstereo_aromatic_smiles.tolist())
+
+for data_ord in data_order:
+    for target in tqdm(regression_tids):
+        for approach in compound_sets:
+            for i in range(3):
+                print(f'Training on {target}')
+
+                # Select Target Database
+                regression_db_tid = regression_db.loc[regression_db.chembl_tid == target]
+
+                # Constructing ChEMBL Dataset
+                fp_matrix = morgan_radius2.transform_smiles(regression_db_tid.nonstereo_aromatic_smiles.tolist())
+
+                # Randomized Class potency
+                if data_ord == "y_rand":
+                    random.shuffle(regression_db_tid.pPot.values)
+
+                # Constructing Dataset
+                dataset = Dataset(fp_matrix, np.array(regression_db_tid.pPot.values))
+                dataset.add_instance("target", regression_db_tid.chembl_tid.values)
+                dataset.add_instance("smiles", regression_db_tid.nonstereo_aromatic_smiles.values)
+
+                # Data Sampling Approaches
+                if approach == 'Diverse set':
+                    fp_bit_vec = ECFP4(regression_db_tid.nonstereo_aromatic_smiles.tolist())
+                    mol_idx = maxminpicker(fp_bit_vec, compound_sets_size, seed=i+1)
+                    dataset = dataset[mol_idx]
+
+                elif approach == 'Random set':
+                    random.seed(i+1)
+                    mol_idx = random.sample([idx for idx in range(dataset.features.shape[0])], int(compound_sets_size*dataset.features.shape[0]))
+                    dataset = dataset[mol_idx]
+
+                # Split dataset into TR and TE
+                data_splitter = ShuffleSplit(n_splits=cv_folds, random_state=20021997, test_size=0.2)
+                for trial, (train_idx, test_idx) in enumerate(data_splitter.split(dataset.features, dataset.target)):
+
+                    #Defining Training and Test sets
+                    training_set = dataset[train_idx]
+                    test_set = dataset[test_idx]
+
+                    # set seed
+                    set_global_determinism(seed=trial)
+
+                    for model in model_list:
+                        print(f'Training {model}')
+
+                        # Save ML models
+                        model_fpath = create_directory(f"./regression_results/trained_models/{model}/", verbose=False)
+                        if model == 'DNN':
+                            ml_model = DNN(training_set, model, training_set.features.shape[1], seed=trial)
+                            model_fpath += ".h5"
+                            ml_model.model.save(model_fpath)
+                        else:
+                            ml_model = MLModel(training_set, model)
+                            model_fpath += ".sav"
+                            pickle.dump(ml_model, open(model_fpath, 'wb'))
+
+                        #Best model parameters dictionary
+                        opt_parameters_dict = {'model': model,
+                                               'trial': trial,
+                                               'Target ID': target}
+                        for param, value in ml_model.best_params.items():
+                            opt_parameters_dict[param] = value
+                        parameter_resume.append(opt_parameters_dict)
+
+                        # TRAIN
+                        #Model Evaluation
+                        model_eval_train = Model_Evaluation(ml_model, training_set)
+
+                        #Performance df
+                        performance_train = model_eval_train.pred_performance
+                        performance_train["trial"] = trial
+                        performance_train["Approach"] = approach
+                        performance_train["Approach_trial"] = i
+                        performance_train["data_order"] = data_ord
+                        performance_train_df = pd.concat([performance_train_df, performance_train])
+
+                        # TEST
+                        #Model Evaluation
+                        model_eval_test = Model_Evaluation(ml_model, test_set)
+
+                        #Performance df
+                        performance_test = model_eval_test.pred_performance
+                        performance_test["trial"] = trial
+                        performance_test["Approach"] = approach
+                        performance_test["Approach_trial"] = i
+                        performance_test["data_order"] = data_ord
+                        performance_test_df = pd.concat([performance_test_df, performance_test])
+
+                        # Prediction df
+                        predictions_test = model_eval_test.predictions
+                        predictions_test["trial"] = trial
+                        predictions_test["Approach"] = approach
+                        predictions_test["Approach_trial"] = i
+                        predictions_test["data_order"] = data_ord
+                        predictions_test_df = pd.concat([predictions_test_df, predictions_test])
+
+                if approach == 'Complete set':
+                    break
+
+    # All Dataframes
+    parameter_df = pd.DataFrame(parameter_resume)
+
+    # Save results
+    if data_ord == 'y_rand':
+        result_path = create_directory('./regression_results/y_rand/')
+        performance_train_df.to_csv(os.path.join(result_path, f'performance_train_y_rand.csv'))
+        performance_test_df.to_csv(os.path.join(result_path, f'performance_test_y_rand.csv'))
+        parameter_df.to_csv(os.path.join(result_path, f'model_best_parameters_y_rand.csv'))
+        predictions_test_df.to_csv(os.path.join(result_path, f'predictions_test_y_rand.csv'))
+    else:
+        result_path = create_directory('./regression_results/regular/')
+        performance_train_df.to_csv(os.path.join(result_path, f'performance_train.csv'))
+        performance_test_df.to_csv(os.path.join(result_path, f'performance_test.csv'))
+        parameter_df.to_csv(os.path.join(result_path, f'model_best_parameters.csv'))
+        predictions_test_df.to_csv(os.path.join(result_path, f'predictions_test.csv'))
+
+
+
+================================================
+FILE: ml_models_cluster_potent_sets.ipynb
+================================================
+# Jupyter notebook converted to Python script.
+
+#Utils
+from ml_utils import *
+from machine_learning_models import *
+from fingerprints import *
+from tqdm.notebook import tqdm
+import pickle
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+%load_ext autoreload
+%autoreload 2
+
+"""
+# Models Parameters
+### Select the desired parameters to be used by regression models
+<p>
+<li> <b>model_list</b>: ML/DL models for regression (kNN: k-neirest neighbor, SVR: Support Vector Regression, RFR: Random Forest Regression, DNN: Deep Neural Network, MR: Median regression)</li>
+</p>
+<p>
+<li> <b>cv_fold</b>: Number do data splits (trials) to be performed</li>
+</p>
+<p>
+<li> <b>opt_metric</b>: Optimization metric to be use for model optimization (MAE: 'neg_mean_absolute_error', MSE: ‘neg_mean_squared_error’)</li>
+</p>
+<p>
+<li> <b>compound_sets</b>: Compound sets to be generated ('Cluster set': Largest Analogue series, ' Potent set': Most potent compounds) </li>
+</p>
+<p>
+<li> <b>potent_size</b>: Potent sets size to be generated (0.1 = 10% original set) </li>
+</p>
+
+
+"""
+
+model_list = ['kNN', 'SVR', 'RFR', 'MR', 'DNN']
+cv_folds=10
+opt_metric = "neg_mean_absolute_error"
+compound_sets = ['Potent set', 'Cluster set']
+potent_size = 0.1
+
+"""
+
+# Loading Data
+"""
+
+# Load CCR results path
+ccr_path = "./ccr_results/"
+# Load actives dB
+db_path = './dataset/'
+# Load actives dB
+regression_db = pd.read_csv(os.path.join(db_path, f'chembl_30_IC50_10_tids_1000_CPDs.csv'))
+# Target Classes
+regression_tids = regression_db.chembl_tid.unique()[:]
+
+"""
+# Models
+"""
+
+performance_train_df = pd.DataFrame()
+predictions_train_df = pd.DataFrame()
+performance_test_df = pd.DataFrame()
+predictions_test_df = pd.DataFrame()
+parameter_resume = []
+
+# Molecular Fingerprints
+morgan_radius2 = FoldedMorganFingerprint(radius=2)
+morgan_radius2.fit_smiles(regression_db.nonstereo_aromatic_smiles.tolist())
+
+for target in tqdm(regression_tids):
+    for approach in compound_sets:
+
+            print(f'Training on {target}')
+
+            # Select Target Database
+            regression_db_tid = regression_db.loc[regression_db.chembl_tid == target]
+
+            if approach == 'Cluster set':
+                ccr_df = pd.read_csv(os.path.join(ccr_path, f'CCR_C30_IC50_HT_single_5_0.666_13_{target}.csv'))
+
+                ccr_df_AS = ccr_df.loc[ccr_df['Core'] == ccr_df['Core'].value_counts().index[0]].chembl_id.values
+
+                df_TR = regression_db_tid.loc[~regression_db_tid['chembl_cid'].isin(ccr_df_AS)]
+
+                df_TE = regression_db_tid.loc[regression_db_tid['chembl_cid'].isin(ccr_df_AS)]
+
+            elif approach == 'Potent set':
+
+                df_TE = regression_db_tid.nlargest(int(round(len(regression_db_tid.index)*potent_size, 0)), 'pPot')
+
+                df_TR = regression_db_tid.loc[~regression_db_tid['chembl_cid'].isin(df_TE['chembl_cid'])]
+
+            # Constructing ChEMBL Dataset
+            fp_matrix_tr = morgan_radius2.transform_smiles(df_TR.nonstereo_aromatic_smiles.tolist())
+            fp_matrix_te = morgan_radius2.transform_smiles(df_TE.nonstereo_aromatic_smiles.tolist())
+
+            #Potency values
+            potency_tr = df_TR.pPot.values
+            potency_te = df_TE.pPot.values
+
+            # Constructing Dataset
+            training_set = Dataset(fp_matrix_tr, np.array(potency_tr))
+            training_set.add_instance("target", df_TR.chembl_tid.values)
+            training_set.add_instance("smiles", df_TR.nonstereo_aromatic_smiles.values)
+
+            test_set = Dataset(fp_matrix_te, np.array(potency_te))
+            test_set.add_instance("target", df_TE.chembl_tid.values)
+            test_set.add_instance("smiles", df_TE.nonstereo_aromatic_smiles.values)
+
+            for model in model_list:
+                print(f'Training {model}')
+                for trial in range(1):
+
+                    # set seed
+                    set_global_determinism(seed=trial)
+                    tf.config.experimental.enable_op_determinism()
+
+                    model_fpath = create_directory(f"./trained_models/{model}/" + f"{target}_{trial}", verbose=False)
+
+                    if trial <=0:
+
+                        if model == 'DNN':
+                            ml_model = DNN(training_set, model, training_set.features.shape[1], seed=trial)
+                            model_fpath += ".h5"
+                            ml_model.model.save(model_fpath)
+                        else:
+                            ml_model = MLModel(training_set, model)
+                            model_fpath += ".sav"
+                            pickle.dump(ml_model, open(model_fpath, 'wb'))
+                    else:
+                        if model == 'DNN':
+                            ml_model = DNN(training_set, model, training_set.features.shape[1], seed=trial)
+                            model_fpath += ".h5"
+                            ml_model.model.save(model_fpath)
+
+                    #Best model parameters
+                    opt_parameters_dict = {'model': model,
+                                           'trial': trial,
+                                           'Target ID': target,
+                                           'Approach':approach}
+                    for param, value in ml_model.best_params.items():
+                        opt_parameters_dict[param] = value
+                    parameter_resume.append(opt_parameters_dict)
+
+                    # TRAIN
+                    #Model Evaluation
+                    model_eval_train = Model_Evaluation(ml_model, training_set)
+
+                    #Performance df
+                    performance_train = model_eval_train.pred_performance
+                    performance_train["trial"] = trial
+                    performance_train["Approach"] = approach
+                    performance_train_df = pd.concat([performance_train_df, performance_train])
+
+                    # Prediction df
+                    predictions_train = model_eval_train.predictions
+                    predictions_train["trial"] = trial
+                    predictions_train["Approach"] = approach
+                    predictions_train_df = pd.concat([predictions_train_df, predictions_train])
+
+                    # TEST
+                    #Model Evaluation
+                    model_eval_test = Model_Evaluation(ml_model, test_set)
+
+                    #Performance df
+                    performance_test = model_eval_test.pred_performance
+                    performance_test["trial"] = trial
+                    performance_test["Approach"] = approach
+                    performance_test_df = pd.concat([performance_test_df, performance_test])
+
+                    # Prediction df
+                    predictions_test = model_eval_test.predictions
+                    predictions_test["trial"] = trial
+                    predictions_test["Approach"] = approach
+                    predictions_test_df = pd.concat([predictions_test_df, predictions_test])
+
+parameter_df = pd.DataFrame(parameter_resume)
+
+# Save results
+result_path = create_directory('./regression_results/cluster_potent/')
+performance_train_df.to_csv(os.path.join(result_path, f'performance_train_cluster_potent.csv'))
+performance_test_df.to_csv(os.path.join(result_path, f'performance_test_cluster_potent.csv'))
+parameter_df.to_csv(os.path.join(result_path, f'model_best_parameters_cluster_potent.csv'))
+predictions_train_df.to_csv(os.path.join(result_path, f'predictions_train_cluster_potent.csv'))
+predictions_test_df.to_csv(os.path.join(result_path, f'predictions_test_cluster_potent.csv'))
+
+
+
+================================================
+FILE: ml_utils.py
+================================================
+# imports
+import os
+import numpy as np
+import scipy.sparse as sparse
+
+
+class TanimotoKernel:
+    def __init__(self, sparse_features=True):
+        self.sparse_features = sparse_features
+
+    @staticmethod
+    def similarity_from_sparse(matrix_a: sparse.csr_matrix, matrix_b: sparse.csr_matrix):
+        intersection = matrix_a.dot(matrix_b.transpose()).toarray()
+        norm_1 = np.array(matrix_a.multiply(matrix_a).sum(axis=1))
+        norm_2 = np.array(matrix_b.multiply(matrix_b).sum(axis=1))
+        union = norm_1 + norm_2.T - intersection
+        return intersection / union
+
+    @staticmethod
+    def similarity_from_dense(matrix_a: np.ndarray, matrix_b: np.ndarray):
+        intersection = matrix_a.dot(matrix_b.transpose())
+        norm_1 = np.multiply(matrix_a, matrix_a).sum(axis=1)
+        norm_2 = np.multiply(matrix_b, matrix_b).sum(axis=1)
+        union = np.add.outer(norm_1, norm_2.T) - intersection
+
+        return intersection / union
+
+    def __call__(self, matrix_a, matrix_b):
+        if self.sparse_features:
+            return self.similarity_from_sparse(matrix_a, matrix_b)
+        else:
+            raise self.similarity_from_dense(matrix_a, matrix_b)
+
+
+def tanimoto_from_sparse(matrix_a: sparse.csr_matrix, matrix_b: sparse.csr_matrix):
+    DeprecationWarning("Please use TanimotoKernel.sparse_similarity")
+    return TanimotoKernel.similarity_from_sparse(matrix_a, matrix_b)
+
+
+def tanimoto_from_dense(matrix_a: np.ndarray, matrix_b: np.ndarray):
+    DeprecationWarning("Please use TanimotoKernel.sparse_similarity")
+    return TanimotoKernel.similarity_from_dense(matrix_a, matrix_b)
+
+
+def maxminpicker(fp_list, ntopick, seed=None):
+    from rdkit import SimDivFilters
+    mmp = SimDivFilters.MaxMinPicker()
+    n_to_pick = round(ntopick * len(fp_list))
+    picks = mmp.LazyBitVectorPick(fp_list, len(fp_list), n_to_pick, seed=seed)
+    return list(picks)
+
+
+def create_directory(path: str, verbose: bool = True):
+    if not os.path.exists(path):
+
+        if len(path.split("/")) <= 2:
+            os.mkdir(path)
+        else:
+            os.makedirs(path)
+        if verbose:
+            print(f"Created new directory '{path}'")
+    return path
+
+
