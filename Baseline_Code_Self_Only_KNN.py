@@ -1,4 +1,4 @@
-okay so that was the code of the repository, let me send what I have done as an attempt to replicate that code
+
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from rdkit import RDLogger
